@@ -1,0 +1,6 @@
+{
+    "src_bucket": "hangzhouhangzhou",
+    "dest_bucket": "hangzhouhangzhou2",
+    "key": "aliyun-python-sdk-lambda.zip",
+    "time_threshold": 5
+}
