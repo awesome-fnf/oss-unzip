@@ -209,8 +209,13 @@ def _EndRecData64(fpin, offset, endrec):
         raise BadZipFile("zipfiles that span multiple disks are not supported")
 
     # Assume no 'zip64 extensible data'
-    fpin.seek(offset - sizeEndCentDir64Locator - sizeEndCentDir64, 2)
-    data = fpin.read(sizeEndCentDir64)
+    if hasattr(fpin, 'bucket'):
+        data = fpin.get_content_bytes(
+            fpin.filesize + offset - sizeEndCentDir64Locator - sizeEndCentDir64, 
+            fpin.filesize+offset-sizeEndCentDir64Locator-1)
+    else:
+        fpin.seek(offset - sizeEndCentDir64Locator - sizeEndCentDir64, 2)
+        data = fpin.read(sizeEndCentDir64)
     if len(data) != sizeEndCentDir64:
         return endrec
     sig, sz, create_version, read_version, disk_num, disk_dir, \
