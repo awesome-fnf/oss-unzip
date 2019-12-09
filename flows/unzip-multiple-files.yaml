@@ -1,0 +1,93 @@
+# This flow unzips files from src_bucket and saves the results to dest_bucket
+# Input:
+# {
+#   "src_bucket": "",
+#   "dest_bucket": "",
+#   "prefix": "",
+#   "delimiter": "",
+#   "marker": ""
+# }
+
+# FDL reference: https://help.aliyun.com/document_detail/122492.html
+# More examples: http://fnf.byexamples.org
+version: v1beta1
+type: flow
+steps:
+  - type: pass
+    name: init
+    outputMappings:
+      - target: marker
+        source: $input.marker
+  - type: task
+    name: listZipFiles
+    resourceArn: acs:fc:::services/ossUnzip/functions/listZipFiles
+    inputMappings:
+      - target: bucket
+        source: $input.src_bucket
+      - target: marker
+        source: $local.marker
+      - target: prefix
+        source: $input.prefix
+      - target: delimiter
+        source: $input.delimiter
+      - target: keys_threshold
+        source: 50
+    retry:
+      - errors:
+        # Retriable errors
+        - FC.ResourceThrottled
+        - FC.ResourceExhausted
+        - FC.InternalServerError
+        - FC.Unknown
+        - FnF.TaskTimeout
+        intervalSeconds: 3
+        maxAttempts: 10
+        multiplier: 1.5
+  - type: foreach
+    name: unzipFiles
+    iterationMapping:
+      collection: $.keys
+      item: key
+    steps:
+      - type: pass
+        name: unzipInit
+        outputMappings:
+          - target: marker
+            source: ""
+      - type: task
+        name: unzip
+        resourceArn: acs:fc:::services/ossUnzip/functions/unzip
+        inputMappings:
+          - target: src_bucket
+            source: $input.src_bucket
+          - target: dest_bucket
+            source: $input.dest_bucket
+          - target: key
+            source: $input.key
+          - target: marker
+            source: $local.marker
+        retry:
+          - errors:
+            # Retriable errors
+            - FC.ResourceThrottled
+            - FC.ResourceExhausted
+            - FC.InternalServerError
+            - FC.Unknown
+            - FnF.TaskTimeout
+            intervalSeconds: 3
+            maxAttempts: 10
+            multiplier: 1.5
+      - type: choice
+        name: hasMoreFilesInZipFile
+        choices:
+          - condition: $.marker != ""
+            goto: unzip
+  - type: choice
+    name: hasMoreFiles
+    choices:
+      - condition: $.has_more
+        goto: listZipFiles
+    default:
+      goto: final
+  - type: succeed
+    name: final

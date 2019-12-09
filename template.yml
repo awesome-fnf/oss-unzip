@@ -9,6 +9,7 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - oss:ListObjects
                 - oss:GetObject
                 - oss:PutObject
               Resource: '*'
@@ -21,7 +22,16 @@ Resources:
       LogConfig:
         Project: test-1585714933323637-hz
         Logstore: test
-      InternetAccess: true
+    listZipFiles:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: index.handler
+        Runtime: python3
+        Timeout: 600
+        MemorySize: 512
+        CodeUri: functions/listZipFiles
+        EnvironmentVariables:
+          OSS_ENDPOINT: 'https://oss-cn-hangzhou-internal.aliyuncs.com'
     unzip:
       Type: 'Aliyun::Serverless::Function'
       Properties:

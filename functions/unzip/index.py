@@ -61,9 +61,7 @@ def handler(event, context):
     raise RuntimeError('{} filetype is not zip'.format(key))
 
   logger.info("start to decompress zip file = {}".format(key))
-  
-  lst = key.split("/")
-  zip_name = lst[-1]
+
   processed_dir = os.environ.get("PROCESSED_DIR", "")
   if processed_dir and processed_dir[-1] != "/":
     processed_dir += "/"
