@@ -41,6 +41,7 @@ Resources:
         MemorySize: 512
         CodeUri: functions/unzip
         EnvironmentVariables:
+          PROCESSED_DIR: unzip
           OSS_ENDPOINT: 'https://oss-cn-hangzhou-internal.aliyuncs.com'
           TIME_THRESHOLD: 500 # 500 seconds
     startUnzip:
@@ -52,7 +53,7 @@ Resources:
         MemorySize: 128
         CodeUri: functions/startUnzip
         EnvironmentVariables:
-            DEST_BUCKET: hangzhouhangzhou2
+            DEST_BUCKET: hangzhouhangzhou
             FLOW_NAME: unzip-single-file
       Events:
         onObjectCreated:
@@ -66,5 +67,5 @@ Resources:
               - oss:ObjectCreated:AppendObject
             Filter: 
               Key:
-                Prefix: zip/
+                Prefix: zip2/
                 Suffix: .zip

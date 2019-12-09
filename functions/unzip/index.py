@@ -66,7 +66,8 @@ def handler(event, context):
   if processed_dir and processed_dir[-1] != "/":
     processed_dir += "/"
   # Keep the old key structure
-  new_path = processed_dir + key
+  lst = key.split("/")
+  new_path = processed_dir + "/".join(lst[1:])
   new_path = new_path.rstrip(".zip")
 
   zip_fp = helper.OssStreamFileLikeObject(src_client, key)
