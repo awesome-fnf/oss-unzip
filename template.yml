@@ -1,6 +1,13 @@
 ROSTemplateFormatVersion: '2015-09-01'
 Transform: 'Aliyun::Serverless-2018-04-03'
 Resources:
+  unzipSingleFile:
+    Type: 'Aliyun::Serverless::Flow'
+    Properties:
+      Description: 'Unzip single file'
+      Policies:
+        - AliyunFCInvocationAccess
+      DefinitionUri: flows/unzip-single-file.yaml
   ossUnzip:
     Type: 'Aliyun::Serverless::Service'
     Properties:
@@ -27,11 +34,9 @@ Resources:
       Properties:
         Handler: index.handler
         Runtime: python3
-        Timeout: 600
-        MemorySize: 512
+        Timeout: 60
+        MemorySize: 256
         CodeUri: functions/listZipFiles
-        EnvironmentVariables:
-          OSS_ENDPOINT: 'https://oss-cn-hangzhou-internal.aliyuncs.com'
     unzip:
       Type: 'Aliyun::Serverless::Function'
       Properties:
@@ -41,30 +46,5 @@ Resources:
         MemorySize: 512
         CodeUri: functions/unzip
         EnvironmentVariables:
-          OSS_ENDPOINT: 'https://oss-cn-hangzhou-internal.aliyuncs.com'
+          PROCESSED_DIR: unzip
           TIME_THRESHOLD: 500 # 500 seconds
-    startUnzip:
-      Type: 'Aliyun::Serverless::Function'
-      Properties:
-        Handler: index.handler
-        Runtime: python3
-        Timeout: 10
-        MemorySize: 128
-        CodeUri: functions/startUnzip
-        EnvironmentVariables:
-            DEST_BUCKET: hangzhouhangzhou2
-            FLOW_NAME: unzip-single-file
-      Events:
-        onObjectCreated:
-          Type: OSS
-          Properties:
-            BucketName: hangzhouhangzhou
-            Events:
-              - oss:ObjectCreated:PutObject
-              - oss:ObjectCreated:PostObject
-              - oss:ObjectCreated:CompleteMultipartUpload
-              - oss:ObjectCreated:AppendObject
-            Filter: 
-              Key:
-                Prefix: zip/
-                Suffix: .zip

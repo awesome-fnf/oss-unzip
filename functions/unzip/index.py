@@ -52,8 +52,9 @@ def handler(event, context):
   logger.setLevel(logging.DEBUG)
   evt = json.loads(event)
   logger.info("Handling event: %s", evt)
-  src_client = get_oss_client(context, os.environ['OSS_ENDPOINT'], evt["src_bucket"])
-  dest_client = get_oss_client(context, os.environ['OSS_ENDPOINT'], evt["dest_bucket"])
+  endpoint = 'https://oss-%s-internal.aliyuncs.com' % context.region
+  src_client = get_oss_client(context, endpoint, evt["src_bucket"])
+  dest_client = get_oss_client(context, endpoint, evt["dest_bucket"])
   key = evt["key"]
   ext = os.path.splitext(key)[1]
 

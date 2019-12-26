@@ -4,13 +4,13 @@ import json
 import os
 import logging
 
-
 def handler(event, context):
   logger = logging.getLogger()
   logger.setLevel(logging.DEBUG)
   evt = json.loads(event)
   logger.info("Handling event: %s", evt)
-  src_client = get_oss_client(context, os.environ['OSS_ENDPOINT'], evt["bucket"])
+  endpoint = 'https://oss-%s-internal.aliyuncs.com' % context.region
+  src_client = get_oss_client(context, endpoint, evt["bucket"])
 
   marker = evt["marker"]
   keys = []
