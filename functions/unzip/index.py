@@ -56,12 +56,19 @@ def handler(event, context):
   src_client = get_oss_client(context, endpoint, evt["src_bucket"])
   dest_client = get_oss_client(context, endpoint, evt["dest_bucket"])
   key = evt["key"]
+
+  if "ObjectCreated:PutSymlink" == evt.get('event_name'):
+    key = src_client.get_symlink(key).target_key
+    logger.info("Resolved target key %s from %s", key, evt["key"])
+    if key == "":
+      raise RuntimeError('{} is invalid symlink file'.format(key))
+
   ext = os.path.splitext(key)[1]
 
   if ext != ".zip":
     raise RuntimeError('{} filetype is not zip'.format(key))
 
-  logger.info("start to decompress zip file = {}".format(key))
+  logger.info("Start to decompress zip file %s", key)
 
   processed_dir = os.environ.get("PROCESSED_DIR", "")
   if processed_dir and processed_dir[-1] != "/":

@@ -4,7 +4,8 @@
 # {
 #   "src_bucket": "a",
 #   "dest_bucket": "b",
-#   "key": "c.zip"
+#   "key": "c.zip",
+#   "event_name": "ObjectCreated:PutObject"
 # }
 
 # FDL reference: https://help.aliyun.com/document_detail/122492.html
@@ -19,28 +20,18 @@ steps:
         source: ""
   - type: task
     name: unzip
-    resourceArn: !Ref ossUnzip/unzip
-    inputMappings:
-      - target: src_bucket
-        source: $input.src_bucket
-      - target: dest_bucket
-        source: $input.dest_bucket
-      - target: key
-        source: $input.key
-      - target: marker
-        source: $local.marker
-    # 错误重试，可以定义多个重试策略，按照定义先后顺序匹配。
+    resourceArn: !Ref OssUnzipFileService/Unzip
     retry:
       - errors:
-        # 可恢复错误可以多重试几次
         - FC.ResourceThrottled
         - FC.ResourceExhausted
         - FC.InternalServerError
         - FC.Unknown
         - FnF.TaskTimeout
-        intervalSeconds: 3
+        intervalSeconds: 1
         maxAttempts: 10
         multiplier: 1.5
+        maxIntervalSeconds: 10
   - type: choice
     name: hasMoreFiles
     choices:

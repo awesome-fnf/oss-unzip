@@ -20,6 +20,7 @@ from aliyunsdkfnf.request.v20190315 import StartExecutionRequest
 
 def handler(event, context):
   logger = logging.getLogger()
+  # event format: https://help.aliyun.com/document_detail/62922.html
   evt_lst = json.loads(event)
   logger.info("Handling event: %s", evt_lst)
 
@@ -36,7 +37,8 @@ def handler(event, context):
   input = {
     "src_bucket": evt["oss"]["bucket"]["name"],
     "dest_bucket": os.environ['DEST_BUCKET'],
-    "key": key
+    "key": key,
+    "event_name": evt["eventName"]
   }
   request.set_Input(json.dumps(input))
   execution_name = re.sub(r"[^a-zA-Z0-9-_]", "_", key) + "-" + evt["responseElements"]["requestId"]

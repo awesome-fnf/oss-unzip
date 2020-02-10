@@ -20,7 +20,7 @@ steps:
         source: $input.marker
   - type: task
     name: listZipFiles
-    resourceArn: acs:fc:::services/ossUnzip/functions/listZipFiles
+    resourceArn: !Ref OssUnzipFileService/ListZipFiles
     inputMappings:
       - target: bucket
         source: $input.src_bucket
@@ -43,6 +43,7 @@ steps:
         intervalSeconds: 3
         maxAttempts: 10
         multiplier: 1.5
+        maxIntervalSeconds: 10
   - type: foreach
     name: unzipFiles
     iterationMapping:
@@ -56,16 +57,7 @@ steps:
             source: ""
       - type: task
         name: unzip
-        resourceArn: acs:fc:::services/ossUnzip/functions/unzip
-        inputMappings:
-          - target: src_bucket
-            source: $input.src_bucket
-          - target: dest_bucket
-            source: $input.dest_bucket
-          - target: key
-            source: $input.key
-          - target: marker
-            source: $local.marker
+        resourceArn: !Ref OssUnzipFileService/Unzip
         retry:
           - errors:
             # Retriable errors
@@ -77,6 +69,7 @@ steps:
             intervalSeconds: 3
             maxAttempts: 10
             multiplier: 1.5
+            maxIntervalSeconds: 10
       - type: choice
         name: hasMoreFilesInZipFile
         choices:

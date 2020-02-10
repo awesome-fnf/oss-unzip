@@ -1,14 +1,36 @@
 ROSTemplateFormatVersion: '2015-09-01'
 Transform: 'Aliyun::Serverless-2018-04-03'
+Parameters:
+  SrcBucket:
+    Type: String
+    Description: 'Specifies the bucket where the compressed files are uploaded'
+  OSSKeyPrefix:
+    Type: String
+    Description: 'The object whose key begins with this prefix will be decompressed'
+    Default: ''
+  OSSKeySuffix:
+    Type: String
+    Description: 'The object whose key ends with this suffix will be decompressed'
+    Default: .zip
+  DestBucket:
+    Type: String
+    Description: 'The bucket that will be used to store the uncompressed files, and can be the same as the source bucket'
+  ProcessedDir:
+    Type: String
+    Description: 'Specifies the directory where the uncompressed files are stored'
+    Default: unzip
+
 Resources:
-  unzipSingleFile:
+  UnzipSingleFileFlow:
     Type: 'Aliyun::Serverless::Flow'
+    DependsOn:
+      - Unzip
     Properties:
       Description: 'Unzip single file'
       Policies:
         - AliyunFCInvocationAccess
       DefinitionUri: flows/unzip-single-file.yaml
-  ossUnzip:
+  OssUnzipFileService:
     Type: 'Aliyun::Serverless::Service'
     Properties:
       Policies:
@@ -20,16 +42,7 @@ Resources:
                 - oss:GetObject
                 - oss:PutObject
               Resource: '*'
-        - Version: '1'
-          Statement:
-            - Effect: Allow
-              Action:
-                - 'fnf:StartExecution'
-              Resource: '*'
-      LogConfig:
-        Project: test-1585714933323637-hz
-        Logstore: test
-    listZipFiles:
+    ListZipFiles:
       Type: 'Aliyun::Serverless::Function'
       Properties:
         Handler: index.handler
@@ -37,7 +50,7 @@ Resources:
         Timeout: 60
         MemorySize: 256
         CodeUri: functions/listZipFiles
-    unzip:
+    Unzip:
       Type: 'Aliyun::Serverless::Function'
       Properties:
         Handler: index.handler
@@ -46,5 +59,50 @@ Resources:
         MemorySize: 512
         CodeUri: functions/unzip
         EnvironmentVariables:
-          PROCESSED_DIR: unzip
+          PROCESSED_DIR:
+            Ref: ProcessedDir
           TIME_THRESHOLD: 500 # 500 seconds
+  OssZipFileWatcherService:
+    Type: 'Aliyun::Serverless::Service'
+    DependsOn:
+      - UnzipSingleFileFlow
+    Properties:
+      Policies:
+        - Version: '1'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'fnf:StartExecution'
+              Resource: '*'
+    StartUnzip:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: index.handler
+        Runtime: python3
+        Timeout: 10
+        MemorySize: 128
+        CodeUri: functions/startUnzip
+        EnvironmentVariables:
+            DEST_BUCKET:
+              Ref: DestBucket
+            FLOW_NAME:
+              'Fn::GetAtt':
+                - UnzipSingleFileFlow
+                - Name
+      Events:
+        onObjectCreated:
+          Type: OSS
+          Properties:
+            BucketName:
+              Ref: SrcBucket
+            Events:
+              - oss:ObjectCreated:PutObject
+              - oss:ObjectCreated:PostObject
+              - oss:ObjectCreated:CompleteMultipartUpload
+              - oss:ObjectCreated:PutSymlink
+            Filter: 
+              Key:
+                Prefix:
+                  Ref: OSSKeyPrefix
+                Suffix:
+                  Ref: OSSKeySuffix
