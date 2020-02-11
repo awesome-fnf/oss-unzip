@@ -62,7 +62,7 @@ Resources:
           PROCESSED_DIR:
             Ref: ProcessedDir
           TIME_THRESHOLD: 500 # 500 seconds
-  OssZipFileWatcherService:
+  OssFileWatcher:
     Type: 'Aliyun::Serverless::Service'
     DependsOn:
       - UnzipSingleFileFlow
