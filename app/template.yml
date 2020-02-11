@@ -1,0 +1,137 @@
+ROSTemplateFormatVersion: '2015-09-01'
+Transform: 'Aliyun::Serverless-2018-04-03'
+Parameters:
+  SrcBucket:
+    Type: String
+    Description: Specifies the bucket where the compressed files are uploaded
+  OSSKeyPrefix:
+    Type: String
+    Description: The object whose key begins with this prefix will be decompressed
+    Default: ''
+  OSSKeySuffix:
+    Type: String
+    Description: The object whose key ends with this suffix will be decompressed
+    Default: .zip
+  DestBucket:
+    Type: String
+    Description: >-
+      The bucket that will be used to store the uncompressed files, and can be
+      the same as the source bucket
+  ProcessedDir:
+    Type: String
+    Description: Specifies the directory where the uncompressed files are stored
+    Default: unzip
+Resources:
+  UnzipSingleFileFlow:
+    Type: 'Aliyun::Serverless::Flow'
+    DependsOn:
+      - OssUnzipFileServiceUnzip
+    Properties:
+      Description: Unzip single file
+      Policies:
+        - AliyunFCInvocationAccess
+      Definition:
+        'Fn::Sub': |
+          version: v1beta1
+          type: flow
+          steps:
+            - type: pass
+              name: init
+              outputMappings:
+                - target: marker
+                  source: ''
+            - type: task
+              name: unzip
+              resourceArn: '${OssUnzipFileServiceUnzip.ARN}'
+              retry:
+                - errors:
+                    - FC.ResourceThrottled
+                    - FC.ResourceExhausted
+                    - FC.InternalServerError
+                    - FC.Unknown
+                    - FnF.TaskTimeout
+                  intervalSeconds: 1
+                  maxAttempts: 10
+                  multiplier: 1.5
+                  maxIntervalSeconds: 10
+            - type: choice
+              name: hasMoreFiles
+              choices:
+                - condition: $.marker != ""
+                  goto: unzip
+  OssUnzipFileService:
+    Type: 'Aliyun::Serverless::Service'
+    Properties:
+      Policies:
+        - Version: '1'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'oss:ListObjects'
+                - 'oss:GetObject'
+                - 'oss:PutObject'
+              Resource: '*'
+    ListZipFiles:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: index.handler
+        Runtime: python3
+        Timeout: 60
+        MemorySize: 256
+        CodeUri: 'oss://%bucket%/%templateName%/093eb7674e3350c84d441101f32f7676'
+    Unzip:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: index.handler
+        Runtime: python3
+        Timeout: 600
+        MemorySize: 512
+        CodeUri: 'oss://%bucket%/%templateName%/bb3ceab57149cbae1817e666d943fce0'
+        EnvironmentVariables:
+          PROCESSED_DIR:
+            Ref: ProcessedDir
+          TIME_THRESHOLD: 500
+  OssZipFileWatcherService:
+    Type: 'Aliyun::Serverless::Service'
+    DependsOn:
+      - UnzipSingleFileFlow
+    Properties:
+      Policies:
+        - Version: '1'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'fnf:StartExecution'
+              Resource: '*'
+    StartUnzip:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: index.handler
+        Runtime: python3
+        Timeout: 10
+        MemorySize: 128
+        CodeUri: 'oss://%bucket%/%templateName%/b03231f22c83f893a488c4367c658072'
+        EnvironmentVariables:
+          DEST_BUCKET:
+            Ref: DestBucket
+          FLOW_NAME:
+            'Fn::GetAtt':
+              - UnzipSingleFileFlow
+              - Name
+      Events:
+        onObjectCreated:
+          Type: OSS
+          Properties:
+            BucketName:
+              Ref: SrcBucket
+            Events:
+              - 'oss:ObjectCreated:PutObject'
+              - 'oss:ObjectCreated:PostObject'
+              - 'oss:ObjectCreated:CompleteMultipartUpload'
+              - 'oss:ObjectCreated:PutSymlink'
+            Filter:
+              Key:
+                Prefix:
+                  Ref: OSSKeyPrefix
+                Suffix:
+                  Ref: OSSKeySuffix

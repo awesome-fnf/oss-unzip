@@ -2,20 +2,6 @@
 
 本应用适用于解压 OSS 大文件。应用会创建 OSS 触发器监听 `SrcBucket` 指定 Bucket 下以 `OSSKeyPrefix` 指定前缀开始并且以 `OSSKeySuffix` 指定后缀结束的文件，当符合条件的文件上传到 OSS 后，会自动触发函数和解压流程。解压后的文件会存放到 `DestBucket` 指定 Bucket 下 `ProcessedDir` 指定目录下。
 
-## 部署
-
-1. 使用[Funcraft](https://help.aliyun.com/document_detail/64204.html)部署资源。
-
-    ```
-    fun package -b bucket-to-store-function-code
-    fun deploy --use-ros --stack-name oss-unzip -p 'SrcBucket=hangzhouhangzhou' -p 'DestBucket=hangzhouhangzhou2' -p 'OSSKeyPrefix=zip' -p 'OSSKeySuffix=.zip'
-    ```
-
-2. 测试解压文件：使用[阿里云 CLI](https://help.aliyun.com/document_detail/122611.html) 执行流程。使用控制台请参见[文档](https://help.aliyun.com/document_detail/124156.html)。执行使用下面的输入格式。该输入将会把 `hangzhouhangzhou` bucket 下的 `tbc/Archive.zip` 解压到 `hangzhouhangzhou2` bucket。
-
-    ```
-    aliyun fnf StartExecution --FlowName unzip-single-file --Input '{"src_bucket": "hangzhouhangzhou", "dest_bucket": "hangzhouhangzhou2", "key": "tbc/Archive.zip"}' --ExecutionName run1
-    ```
 
 ## 使用示例
 
@@ -37,6 +23,8 @@
 
 其它相关解压方案：
 
-1. 如果解压后的文件不会超过函数计算运行环境最大内存限制（3GB），可以直接将文件在内存解压并将结果保存到 OSS，请参见[方案](https://github.com/coco-super/simple-fc-uncompress-service-for-oss)。
-2. 如果解压后文件太大，超过最大内存限制，则可以使用流式将文件解压并将结果保存到 OSS，请参见[方案](https://github.com/coco-super/streaming-fc-uncompress-service-for-oss)。
+1. 如果解压后的文件不会超过函数计算运行环境最大内存限制（3GB），可以直接将文件在内存解压并将结果保存到 OSS，请参见[方案](https://github.com/coco-super/simple-fc-uncompress-service-for-oss)
+2. 如果解压后文件太大，超过最大内存限制，则可以使用流式将文件解压并将结果保存到 OSS，请参见[方案](https://github.com/coco-super/streaming-fc-uncompress-service-for-oss)
 
+
+项目源码：[https://github.com/awesome-fnf/oss-unzip](https://github.com/awesome-fnf/oss-unzip)

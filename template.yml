@@ -34,7 +34,7 @@ Resources:
     Type: 'Aliyun::Serverless::Service'
     Properties:
       Policies:
-        - Version: '1' # Allow ListObjects and Get/PutObject
+        - Version: '1'
           Statement:
             - Effect: Allow
               Action:
