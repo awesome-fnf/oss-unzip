@@ -19,6 +19,10 @@ Parameters:
     Type: String
     Description: 'Specifies the directory where the uncompressed files are stored'
     Default: unzip
+  ProcessedDir2:
+    Type: String
+    Description: 'Specifies the directory where the uncompressed files are stored'
+    Default: unzip2
 
 Resources:
   UnzipSingleFileFlow:
@@ -29,7 +33,7 @@ Resources:
       Description: 'Unzip single file'
       Policies:
         - AliyunFCInvocationAccess
-      DefinitionUri: flows/unzip-single-file.yaml
+      DefinitionUri: flows/unzip-single-file.flow.yml
   OssUnzipFileService:
     Type: 'Aliyun::Serverless::Service'
     Properties:
@@ -61,6 +65,18 @@ Resources:
         EnvironmentVariables:
           PROCESSED_DIR:
             Ref: ProcessedDir
+          TIME_THRESHOLD: 500 # 500 seconds
+    UnzipWithBuffer:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: index.handler
+        Runtime: python3
+        Timeout: 600
+        MemorySize: 512
+        CodeUri: functions/unzipWithBuffer
+        EnvironmentVariables:
+          PROCESSED_DIR:
+            Ref: ProcessedDir2
           TIME_THRESHOLD: 500 # 500 seconds
   OssFileWatcher:
     Type: 'Aliyun::Serverless::Service'
