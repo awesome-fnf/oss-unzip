@@ -21,10 +21,23 @@ Parameters:
     Type: String
     Description: Specifies the directory where the uncompressed files are stored
     Default: unzip
+  MaxConcurrent:
+    Type: Number
+    Description: The max foreach concurrent
+    Default: 100
+  MaxWorkersPerTask:
+    Type: Number
+    Description: The max workers thread per unzip task
+    Default: 100
+  MinCountPerTask:
+    Type: Number
+    Description: The min number files unzip per task
+    Default: 1000
 Resources:
   UnzipSingleFileFlow:
     Type: 'Aliyun::Serverless::Flow'
     DependsOn:
+      - OssUnzipFileServiceSplit
       - OssUnzipFileServiceUnzip
     Properties:
       Description: Unzip single file
@@ -38,11 +51,23 @@ Resources:
             - type: pass
               name: init
               outputMappings:
-                - target: marker
-                  source: ''
+                - target: src_bucket
+                  source: $input.src_bucket
+                - target: dest_bucket
+                  source: $input.dest_bucket
+                - target: key
+                  source: $input.key
+                - target: event_name
+                  source: $input.event_name
+                - target: max_concurrent
+                  source: $input.max_concurrent
+                - target: min_count_per_task
+                  source: $input.min_count_per_task
+                - target: max_workers_per_task
+                  source: $input.max_workers_per_task
             - type: task
-              name: unzip
-              resourceArn: '${OssUnzipFileServiceUnzip.ARN}'
+              name: split
+              resourceArn: '${OssUnzipFileServiceSplit.ARN}'
               retry:
                 - errors:
                     - FC.ResourceThrottled
@@ -54,11 +79,31 @@ Resources:
                   maxAttempts: 10
                   multiplier: 1.5
                   maxIntervalSeconds: 10
-            - type: choice
-              name: hasMoreFiles
-              choices:
-                - condition: $.marker != ""
-                  goto: unzip
+            - type: foreach
+              name: unzipForeach
+              iterationMapping:
+                collection: $.groups
+                item: group
+              steps:
+                - type: task
+                  name: unzipTask
+                  resourceArn: '${OssUnzipFileServiceUnzip.ARN}'
+                  retry:
+                    - errors:
+                        - FC.ResourceThrottled
+                        - FC.ResourceExhausted
+                        - FC.InternalServerError
+                        - FC.Unknown
+                        - FnF.TaskTimeout
+                      intervalSeconds: 1
+                      maxAttempts: 10
+                      multiplier: 1.5
+                      maxIntervalSeconds: 10
+                - type: choice
+                  name: hasMoreFiles
+                  choices:
+                    - condition: $.status != "success"
+                      goto: unzipTask
   OssUnzipFileService:
     Type: 'Aliyun::Serverless::Service'
     Properties:
@@ -78,15 +123,26 @@ Resources:
         Runtime: python3
         Timeout: 60
         MemorySize: 256
-        CodeUri: 'oss://%bucket%/%templateName%/093eb7674e3350c84d441101f32f7676'
-    Unzip:
+        CodeUri: >-
+          oss://%bucket%/%templateName%/9d2ad12b00c262d13a147b4a192d0e05
+    Split:
       Type: 'Aliyun::Serverless::Function'
       Properties:
         Handler: index.handler
         Runtime: python3
         Timeout: 600
-        MemorySize: 512
-        CodeUri: 'oss://%bucket%/%templateName%/bb3ceab57149cbae1817e666d943fce0'
+        MemorySize: 3072
+        CodeUri: >-
+          oss://%bucket%/%templateName%/35a5607d5d3909f8933c0643641409a2
+    Unzip:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: unzip.handler
+        Runtime: python3
+        Timeout: 600
+        MemorySize: 3072
+        CodeUri: >-
+          oss://%bucket%/%templateName%/35a5607d5d3909f8933c0643641409a2
         EnvironmentVariables:
           PROCESSED_DIR:
             Ref: ProcessedDir
@@ -110,7 +166,8 @@ Resources:
         Runtime: python3
         Timeout: 10
         MemorySize: 128
-        CodeUri: 'oss://%bucket%/%templateName%/b03231f22c83f893a488c4367c658072'
+        CodeUri: >-
+          oss://%bucket%/%templateName%/8454724e0d52b7bd48a71845ddc6892d
         EnvironmentVariables:
           DEST_BUCKET:
             Ref: DestBucket
@@ -118,6 +175,12 @@ Resources:
             'Fn::GetAtt':
               - UnzipSingleFileFlow
               - Name
+          MAX_CONCURRENT:
+            Ref: MaxConcurrent
+          MAX_WORKERS_PER_TASK:
+            Ref: MaxWorkersPerTask
+          MIN_COUNT_PER_TASK:
+            Ref: MinCountPerTask
       Events:
         onObjectCreated:
           Type: OSS

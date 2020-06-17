@@ -19,6 +19,18 @@ Parameters:
     Type: String
     Description: 'Specifies the directory where the uncompressed files are stored'
     Default: unzip
+  MaxConcurrent:
+    Type: Number
+    Description: 'The max foreach concurrent'
+    Default: 100
+  MaxWorkersPerTask:
+    Type: Number
+    Description: 'The max workers thread per unzip task'
+    Default: 100
+  MinCountPerTask:
+    Type: Number
+    Description: 'The min number files unzip per task'
+    Default: 1000
 
 Resources:
   UnzipSingleFileFlow:
@@ -50,18 +62,27 @@ Resources:
         Timeout: 60
         MemorySize: 256
         CodeUri: functions/listZipFiles
-    Unzip:
+    Split:
       Type: 'Aliyun::Serverless::Function'
       Properties:
         Handler: index.handler
         Runtime: python3
         Timeout: 600
-        MemorySize: 512
+        MemorySize: 3072
+        CodeUri: functions/unzip
+    Unzip:
+      Type: 'Aliyun::Serverless::Function'
+      Properties:
+        Handler: unzip.handler
+        Runtime: python3
+        Timeout: 600
+        MemorySize: 3072
         CodeUri: functions/unzip
         EnvironmentVariables:
           PROCESSED_DIR:
             Ref: ProcessedDir
           TIME_THRESHOLD: 500 # 500 seconds
+
   OssFileWatcher:
     Type: 'Aliyun::Serverless::Service'
     DependsOn:
@@ -89,6 +110,12 @@ Resources:
               'Fn::GetAtt':
                 - UnzipSingleFileFlow
                 - Name
+            MAX_CONCURRENT:
+              Ref: MaxConcurrent
+            MAX_WORKERS_PER_TASK:
+              Ref: MaxWorkersPerTask
+            MIN_COUNT_PER_TASK:
+              Ref: MinCountPerTask
       Events:
         onObjectCreated:
           Type: OSS

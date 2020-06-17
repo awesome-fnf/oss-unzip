@@ -24,7 +24,9 @@ import helper
 import oss2, json
 import os
 import logging
+import chardet
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 """
 When a source/ prefix object is placed in an OSS, it is hoped that the object will be decompressed and then stored in the OSS as processed/ prefixed.
@@ -47,6 +49,7 @@ def handler(event, context):
 
         For detail info, please refer to https://help.aliyun.com/document_detail/56316.html#using-context
     """
+    start_time = time.time()
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     evt = json.loads(event)
@@ -54,11 +57,12 @@ def handler(event, context):
 
     endpoint = 'https://oss-%s-internal.aliyuncs.com' % context.region
     src_client = get_oss_client(context, endpoint, evt["src_bucket"])
+    dest_client = get_oss_client(context, endpoint, evt["dest_bucket"])
     key = evt["key"]
-    max_concurrent = evt.get("max_concurrent", 100)  # foreach concurrent count
-    min_count_per_task = evt.get('min_count_per_task', 1000)  # per unzip task handled minimum files count
-    max_concurrent = max_concurrent if max_concurrent > 0 else 100
-    min_count_per_task = min_count_per_task if min_count_per_task > 0 else 1000
+    group = evt["group"]
+    start_index = group[0]
+    end_index = group[1]
+    max_workers_per_task = evt.get('max_workers_per_task', 10)
 
     if "ObjectCreated:PutSymlink" == evt.get('event_name'):
         key = src_client.get_symlink(key).target_key
@@ -67,38 +71,78 @@ def handler(event, context):
             raise RuntimeError('{} is invalid symlink file'.format(key))
 
     ext = os.path.splitext(key)[1]
+
     if ext != ".zip":
         raise RuntimeError('{} filetype is not zip'.format(key))
 
-    logger.info("Start to splits zip file %s", key)
+    logger.info("Start to decompress zip file %s in group: %s", key, str(group))
+    processed_dir = os.environ.get("PROCESSED_DIR", "")
+    if processed_dir and processed_dir[-1] != "/":
+        processed_dir += "/"
+    # Keep the old key structure
+    new_path = processed_dir + key
+    new_path = new_path.rstrip(".zip")
+
     zip_fp = helper.OssStreamFileLikeObject(src_client, key)
 
-    # Splits to multi segments
+    # Run up to threshold seconds
+    threshold = evt.get("time_threshold", int(os.environ["TIME_THRESHOLD"]))
+
+    executor = ThreadPoolExecutor(max_workers=max_workers_per_task)
     with helper.zipfile_support_oss.ZipFile(zip_fp) as zf:
-        total = len(zf.namelist())
-        groups = split(total, max_concurrent, min_count_per_task)
-    logger.info("Split files into %d groups", len(groups))
+        # unzip single file
+        def unzip(name):
+            logger = logging.getLogger()
+            logger.debug("Processing %s", name)
+
+            if name.endswith("/"):
+                logger.debug("Skipping dir %s", name)
+                return
+
+            logger.debug("Unzipping %s", name)
+            with zf.open(name) as file_obj:
+                try:
+                    name = name.encode(encoding='cp437')
+                except:
+                    name = name.encode(encoding='utf-8')
+
+                # the string to be detect is long enough, the detection result accuracy is higher
+                detect = chardet.detect((name * 100)[0:100])
+                confidence = detect["confidence"]
+                if confidence > 0.8:
+                    try:
+                        name = name.decode(encoding=detect["encoding"])
+                    except:
+                        name = name.decode(encoding='gb2312')
+                else:
+                    name = name.decode(encoding="gb2312")
+
+                dest_client.put_object(new_path + "/" + name, file_obj)
+                return
+
+        namelist = zf.namelist()
+        while start_index <= end_index:
+            cur_count = min(end_index - start_index + 1, max_workers_per_task)
+            res = []
+            for ind in range(start_index, start_index + cur_count):
+                res.append(executor.submit(unzip, namelist[ind]))
+
+            # Wait for all unzip finished
+            for f in res:
+                f.result()
+
+            start_index += cur_count
+
+            # Check time over
+            if threshold and time.time() - start_time >= threshold:
+                break
+
+    executor.shutdown()
+
     return {
-        "groups": groups,
+        "group": [start_index, end_index],
+        "status": "running" if start_index <= end_index else "success",
     }
-
-
-def split(total, max_group, min_count_per_group):
-    groups = []
-    per_count = total // max_group
-    per_count = per_count + 1 if total % max_group != 0 else per_count
-    per_count = max(per_count, min_count_per_group)
-
-    offset = 0
-    for ind in range(max_group):
-        cur_count = min(per_count, total)
-        groups.append((offset, offset + cur_count - 1))
-        total -= cur_count
-        if total == 0:
-            break
-        offset += cur_count
-
-    return groups
 
 
 def get_oss_client(context, endpoint, bucket):
@@ -110,8 +154,3 @@ def get_oss_client(context, endpoint, bucket):
         endpoint = str.replace(endpoint, "-internal", "")
         auth = oss2.Auth(creds.access_key_id, creds.access_key_secret)
     return oss2.Bucket(auth, endpoint, bucket)
-
-
-if __name__ == '__main__':
-    print(split(1000, 100, 1000))
-    print(split(1000000, 100, 1000))
